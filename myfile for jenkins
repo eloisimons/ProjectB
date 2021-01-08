@@ -1,0 +1,41 @@
+node{
+    
+    stage("Git Clone"){
+        git credentialsId: 'GIT_CREDENTIALS', url: 'https://github.com/eloisimons/ProjectB'
+    }
+//ensure maven is installed automatically using jenkins tool configuration
+    
+    stage("Maven Clean Build"){
+        def mavenHome = tool name: "Maven-3.6.3", type: "maven"
+        def mavenCMD = "${mavenHome}/bin/mvn"
+        sh "${mavenCMD} clean package"
+    }
+    
+//ensure docker is installed in your jenkins server and jenkins has permissions to run docker commands   
+//"eloisimons below is my dockerhub username, projectB is the repo. Therefore eloisimons/projectb . will be your image name from the directory specified"
+    stage("Build Docker Image"){
+        sh "docker build -t eloisimons/projectb ."
+    }
+    
+//create credentials in jenkins for your docker password. withCredentials: Bind credential to variables -> Bindings -> add -> select "secret text"-> credentials/add-> jekinins. Kind -> secret text -> secret: add password ->     
+    stage("Docker Push"){
+        withCredentials([string(credentialsId: 'DOCKER_HUB_CREDENTIALS', variable: 'DOCKER_HUB_CREDENTIALS')]) {
+            sh "docker login -u eloisimons -p ${DOCKER_HUB_CREDENTIALS}"
+        }
+        sh "docker push eloisimons/projectb "
+    }
+    
+//install kubernetes continuos deploy in jenkins
+//click on admin(top right of jenkins) -> click credentials -> Stores from parent -> domain (Global) add credentials -> kind: kubernetes configuration(kubeconfig)-> ID add "KUBERNETES_CLUSTER_CONFIG" -> Description add "Kubernetes config"
+//now run ls .kube/ in the master k8 node
+//run cat .kube/config in the master k8 node, this will give you a long output. copy this complete output and place this in the Kubeconfig (enter directly)
+//copy config id from credentials for K8 and use that below
+
+    stage("Deploy to Kubernetes Cluster"){
+        kubernetesDeploy(
+            configs: 'sampleapp-deploy-k8s.yml',
+            kubeconfigId: 'KUBERNETES_CLUSTER_CONFIG',
+            enableConfigSubstitution: true
+        )
+    }
+}
